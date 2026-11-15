@@ -105,7 +105,7 @@
       return { perPcs: m.perPcs, sub: m.hasil > 0 ? 'Total ' + rp(m.total) + ' ÷ ' + fmt(m.hasil) + ' pcs' : 'Isi dulu hasil jadi (pcs)' };
     }
     if (d.mode === 'jadi') return { perPcs: C.modalJadi(d.beli, d.ongkos), sub: rp(num(d.beli)) + ' + ' + rp(num(d.ongkos)) };
-    return { perPcs: num(d.modal), sub: 'Diisi sendiri, hitungan otomatis tidak dipakai' };
+    return { perPcs: num(d.modal), sub: 'Jasa: modal bahan diisi sendiri' };
   }
 
   function bahanRow(b, i) {
@@ -124,7 +124,7 @@
       var d = draft, m = modalNow(d), h = '';
       h += head('HITUNG HARGA JUAL · LANGKAH 1', 'Modal per pcs', 'Pilih cara menghitung modal.');
       h += '<main>';
-      h += '<div class="sg">' + [['sendiri', 'Bikin sendiri'], ['jadi', 'Beli jadi'], ['manual', 'Isi sendiri']].map(function (x) {
+      h += '<div class="sg">' + [['sendiri', 'Buat sendiri'], ['jadi', 'Beli lalu jual'], ['manual', 'Jasa']].map(function (x) {
         return '<button class="' + (d.mode === x[0] ? 'on' : '') + '" data-a="mode" data-v="' + x[0] + '">' + x[1] + '</button>';
       }).join('') + '</div>';
       h += res('res', 'Modal per pcs', rp(m.perPcs), m.sub);
@@ -144,9 +144,9 @@
         h += F('Ongkos tambahan per pcs (Rp)', 'd.ongkos', d.ongkos, { ph: '500' });
         h += '<div class="hint">Ongkos tambahan: ongkos kirim, plastik, es, dan sejenisnya. Isi 0 kalau tidak ada.</div>';
       } else {
-        h += F('Nama produk', 'd.nama', d.nama, { mode: 'text', ph: 'Contoh: brownies kukus' });
-        h += F('Modal per pcs (Rp)', 'd.modal', d.modal, { ph: '8.500' });
-        h += '<div class="hint">Pilih ini kalau Anda sudah tahu modalnya. Angka ini langsung dipakai untuk menghitung harga jual dan untung.</div>';
+        h += F('Nama jasa', 'd.nama', d.nama, { mode: 'text', ph: 'Contoh: cuci motor' });
+        h += F('Modal bahan per layanan (Rp), boleh kosong', 'd.modal', d.modal, { ph: '3.000' });
+        h += '<div class="hint">Bahan habis pakai untuk 1 kali layanan, misalnya sabun dan pewangi. Kosongkan kalau tidak ada. Tarif jasa Anda diisi di langkah berikutnya.</div>';
       }
       h += btn('Lanjut: tentukan harga jual', 'toHarga');
       h += '</main>';
@@ -186,7 +186,7 @@
     },
     update: function () {
       var d = draft, x = hargaNow(d), m = num(d.margin), p = num(d.plat);
-      if (x.saran == null) setRes('res', { b: '-', s: x.modal > 0 ? 'Untung + potongan harus di bawah 100%.' : 'Modal belum diisi.', xv: '-' });
+      if (x.saran == null) setRes('res', { b: '-', s: x.modal > 0 ? 'Untung + potongan harus di bawah 100%.' : (d.mode === 'manual' ? 'Isi tarif jasa Anda di kolom bawah.' : 'Modal belum diisi.'), xv: '-' });
       else setRes('res', { b: rp(Math.round(x.saran)), s: rp(x.modal) + ' ÷ (1 − ' + (m / 100).toFixed(2).replace('.', ',') + ' − ' + (p / 100).toFixed(2).replace('.', ',') + ')', xv: rp(Math.round(x.saran) - x.modal) });
       var u = x.pakai - x.modal;
       set('hu', rp(u) + ' (' + fmt(C.persenUntung(x.pakai, x.modal), 1) + '% dari harga jual)');
@@ -543,7 +543,7 @@
       var d = draft, m = modalNow(d);
       if (!d.nama.trim()) return toast('Isi nama produk dulu.');
       if (d.mode === 'sendiri' && !(num(d.hasil) > 0)) return toast('Isi hasil jadi (pcs) dulu.');
-      if (!(m.perPcs > 0)) return toast('Modal per pcs belum terhitung. Isi dulu angkanya.');
+      if (d.mode !== 'manual' && !(m.perPcs > 0)) return toast('Modal per pcs belum terhitung. Isi dulu angkanya.');
       go('harga');
     },
     why: function () { ui.why = !ui.why; var w = $('why'); if (w) w.style.display = ui.why ? 'block' : 'none'; },

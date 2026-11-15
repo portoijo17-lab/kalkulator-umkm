@@ -1,5 +1,5 @@
 /* Service worker: aplikasi bisa dibuka tanpa internet, dan diperbarui otomatis saat online. */
-const VERSI = 'v3';
+const VERSI = 'v4';
 const CACHE = 'kalkulator-umkm-' + VERSI;
 const FILE = ['./', 'index.html', 'style.css', 'calc.js', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
 
