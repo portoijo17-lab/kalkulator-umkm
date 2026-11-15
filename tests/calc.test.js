@@ -102,6 +102,28 @@ sama('tepung per pcs', C.pemakaianPerPcs(pr)[0].per, 0.1);
 sama('tepung 12 pcs', C.pemakaianPerPcs(pr)[0].per * 12, 1.2);
 sama('beli jadi 1:1', C.pemakaianPerPcs({ src: { mode: 'jadi', nama: 'Air mineral' } })[0].per, 1);
 
+// Jasa: jahit 1000 pcs (contoh mockup)
+const jas = {
+  pesanan: 1000,
+  biaya: [
+    { jml: 3000, cara: 'pcs' },
+    { jml: 500000, cara: 'sekali' },
+    { jml: 100000, cara: 'harian', orang: 5, hari: 6 }
+  ],
+  bstok: [{ nama: 'Benang', jumlah: 20, harga: 8000, cara: 'semua' }]
+};
+const mj = C.modalJasa(jas);
+sama('jasa biaya', mj.biaya, 6500000);
+sama('jasa bahan stok', mj.bahan, 160000);
+sama('jasa total', mj.total, 6660000);
+sama('jasa modal per pcs', mj.perPcs, 6660);
+sama('jasa harian baris', C.biayaBaris(jas.biaya[2], 1000), 3000000);
+sama('jasa harga jual 40%', Math.round(C.hargaJual(6660, 40, 0)), 11100);
+sama('jasa pemakaian benang per pcs', C.pemakaianPerPcs({ src: Object.assign({ mode: 'manual' }, jas) })[0].per, 0.02);
+sama('jasa pemakaian per pcs langsung', C.pemakaianPerPcs({ src: { mode: 'manual', pesanan: 1, bstok: [{ nama: 'Sabun', jumlah: 0.05, cara: 'pcs' }] } })[0].per, 0.05);
+sama('jasa tanpa isi', C.modalJasa({ pesanan: 1, biaya: [], bstok: [] }).perPcs, 0);
+sama('jasa lama (modal manual) tetap terbaca', C.modalJasa({ pesanan: 1, modal: '3.000' }).perPcs, 3000);
+
 // Tampilan rupiah
 sama('rp', C.rp(15000), 'Rp15.000');
 sama('rp negatif', C.rp(-50000), '-Rp50.000');

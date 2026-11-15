@@ -33,6 +33,28 @@
     };
   }
 
+  // Jasa: daftar biaya + bahan dari stok untuk satu pesanan, dibagi jumlah pesanan (pcs).
+  // biaya: [{jml, cara: 'pcs'|'sekali'|'harian', orang, hari}]; bstok: [{jumlah, harga, cara: 'pcs'|'semua'}].
+  function biayaBaris(b, n) {
+    var j = parseNum(b.jml);
+    if (b.cara === 'sekali') return j;
+    if (b.cara === 'harian') return j * parseNum(b.orang) * parseNum(b.hari);
+    return j * n;
+  }
+  function bahanBaris(b, n) {
+    var t = parseNum(b.jumlah) * parseNum(b.harga);
+    return b.cara === 'semua' ? t : t * n;
+  }
+  function modalJasa(o) {
+    var n = parseNum(o.pesanan);
+    var biaya = 0, bahan = 0;
+    (o.biaya || []).forEach(function (b) { biaya += biayaBaris(b, n); });
+    (o.bstok || []).forEach(function (b) { bahan += bahanBaris(b, n); });
+    if (!Array.isArray(o.biaya)) biaya += parseNum(o.modal) * n;
+    var total = biaya + bahan;
+    return { pesanan: n, biaya: biaya, bahan: bahan, total: total, perPcs: n > 0 ? total / n : 0 };
+  }
+
   function modalJadi(beli, ongkos) {
     return parseNum(beli) + parseNum(ongkos);
   }
@@ -150,6 +172,14 @@
       });
     } else if (s.mode === 'jadi') {
       if (s.nama) out.push({ nama: s.nama, per: 1 });
+    } else if (s.mode === 'manual') {
+      var n = parseNum(s.pesanan);
+      (s.bstok || []).forEach(function (b) {
+        var j = parseNum(b.jumlah);
+        if (!b.nama || !(j > 0)) return;
+        if (b.cara === 'semua') { if (n > 0) out.push({ nama: b.nama, per: j / n }); }
+        else out.push({ nama: b.nama, per: j });
+      });
     }
     return out;
   }
@@ -165,7 +195,7 @@
   }
 
   var api = {
-    parseNum: parseNum, round: round, modalSendiri: modalSendiri, modalJadi: modalJadi,
+    parseNum: parseNum, round: round, modalSendiri: modalSendiri, modalJadi: modalJadi, modalJasa: modalJasa, biayaBaris: biayaBaris, bahanBaris: bahanBaris,
     hargaJual: hargaJual, untungPerPcs: untungPerPcs, persenUntung: persenUntung, targetAman: targetAman,
     hariDalamBulan: hariDalamBulan, biayaTotal: biayaTotal, biayaPerHari: biayaPerHari,
     untungJualan: untungJualan, untungBersihHari: untungBersihHari, hariBerjalan: hariBerjalan,

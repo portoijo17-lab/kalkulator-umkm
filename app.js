@@ -80,7 +80,7 @@
   var cur = { name: '', arg: '', route: null };
 
   function newDraft(mode) {
-    return { id: null, mode: mode || 'sendiri', nama: '', hasil: '', bahan: [{ nama: '', jumlah: '', satuan: '', harga: '' }], kemasan: '', upah: '', susut: '0', beli: '', ongkos: '', modal: '', margin: '40', plat: '0', harga: '' };
+    return { id: null, mode: mode || 'sendiri', nama: '', hasil: '', bahan: [{ nama: '', jumlah: '', satuan: '', harga: '' }], kemasan: '', upah: '', susut: '0', beli: '', ongkos: '', modal: '', margin: '40', plat: '0', harga: '', pesanan: '1', biaya: [], bstok: [] };
   }
   function produkById(id) { return db.produk.filter(function (p) { return String(p.id) === String(id); })[0]; }
   function stokById(id) { return db.stok.filter(function (s) { return String(s.id) === String(id); })[0]; }
@@ -99,13 +99,52 @@
   }
 
   // ---------- Modal per pcs ----------
+  function jasaNorm(d) {
+    if (!d.pesanan) d.pesanan = '1';
+    if (!Array.isArray(d.bstok)) d.bstok = [];
+    if (!Array.isArray(d.biaya)) {
+      d.biaya = String(d.modal || '').trim() !== '' ? [{ nama: 'Modal bahan', jml: d.modal, cara: 'pcs', orang: '', hari: '' }] : [];
+    }
+  }
+  function lastHarga(stokId) {
+    var bl = db.belanja.filter(function (b) { return b.itemId === stokId && num(b.jml) > 0; }).sort(function (a, b) { return a.tgl < b.tgl ? 1 : (a.tgl > b.tgl ? -1 : b.id - a.id); });
+    return bl.length ? Math.round(num(bl[0].total) / num(bl[0].jml)) : null;
+  }
+  function selCara(opts, val, ch, i) {
+    return '<div class="field"><label>Dihitung</label><select data-ch="' + ch + '" data-i="' + i + '">' + opts.map(function (o) {
+      return '<option value="' + o[0] + '"' + (o[0] === val ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('') + '</select></div>';
+  }
+  function biayaRow(b, i) {
+    var x = '<div class="bahan"><div class="top">' + F('Nama biaya', 'd.biaya.' + i + '.nama', b.nama, { mode: 'text', ph: 'Contoh: ongkos jahit' }) +
+      '<button class="xbtn" data-a="delJBiaya" data-i="' + i + '" aria-label="Hapus biaya">×</button></div>' +
+      '<div class="rowf">' + F('Jumlah (Rp)', 'd.biaya.' + i + '.jml', b.jml, { ph: '3.000' }) +
+      selCara([['pcs', 'per pcs'], ['sekali', 'sekali saja'], ['harian', 'per orang per hari']], b.cara, 'jCara', i) + '</div>';
+    if (b.cara === 'harian') x += '<div class="rowf">' + F('Jumlah orang', 'd.biaya.' + i + '.orang', b.orang, { ph: '5' }) + F('Jumlah hari', 'd.biaya.' + i + '.hari', b.hari, { ph: '6' }) + '</div>';
+    return x + '<div class="sub-line" id="jb' + i + '"></div></div>';
+  }
+  function bstokRow(b, i) {
+    var s = b.nama ? stokByName(b.nama) : null;
+    var opt = '<option value="">Pilih bahan…</option>' + db.stok.map(function (t) {
+      return '<option value="' + esc(t.nama) + '"' + (s && s.id === t.id ? ' selected' : '') + '>' + esc(t.nama) + '</option>';
+    }).join('');
+    var info = s ? 'Satuan ' + esc(s.satuan) + ' · sisa stok ' + fmt(num(s.stok)) + ' · ' + C.stokStatus(s) : (b.nama ? 'Bahan ini tidak ada di daftar stok.' : '');
+    return '<div class="bahan"><div class="top"><div class="field"><label>Bahan</label><select data-ch="jBahan" data-i="' + i + '">' + opt + '</select></div>' +
+      '<button class="xbtn" data-a="delBstok" data-i="' + i + '" aria-label="Hapus bahan">×</button></div>' +
+      (info ? '<div class="hint">' + info + '</div>' : '') +
+      '<div class="rowf">' + F('Jumlah dipakai', 'd.bstok.' + i + '.jumlah', b.jumlah, { ph: '20' }) + selCara([['pcs', 'per pcs'], ['semua', 'seluruh pesanan']], b.cara, 'jCaraB', i) + '</div>' +
+      F('Harga per satuan (Rp)', 'd.bstok.' + i + '.harga', b.harga, { ph: '8.000' }) +
+      '<div class="sub-line" id="jt' + i + '"></div></div>';
+  }
   function modalNow(d) {
     if (d.mode === 'sendiri') {
       var m = C.modalSendiri(d);
       return { perPcs: m.perPcs, sub: m.hasil > 0 ? 'Total ' + rp(m.total) + ' ÷ ' + fmt(m.hasil) + ' pcs' : 'Isi dulu hasil jadi (pcs)' };
     }
     if (d.mode === 'jadi') return { perPcs: C.modalJadi(d.beli, d.ongkos), sub: rp(num(d.beli)) + ' + ' + rp(num(d.ongkos)) };
-    return { perPcs: num(d.modal), sub: 'Jasa: modal bahan diisi sendiri' };
+    jasaNorm(d);
+    var j = C.modalJasa(d);
+    return { perPcs: j.perPcs, jasa: j, sub: j.pesanan > 0 ? 'Total ' + rp(j.total) + ' ÷ ' + fmt(j.pesanan) + ' pcs' : 'Isi dulu jumlah pesanan (pcs)' };
   }
 
   function bahanRow(b, i) {
@@ -127,7 +166,7 @@
       h += '<div class="sg">' + [['sendiri', 'Buat sendiri'], ['jadi', 'Beli lalu jual'], ['manual', 'Jasa']].map(function (x) {
         return '<button class="' + (d.mode === x[0] ? 'on' : '') + '" data-a="mode" data-v="' + x[0] + '">' + x[1] + '</button>';
       }).join('') + '</div>';
-      h += res('res', 'Modal per pcs', rp(m.perPcs), m.sub);
+      h += res('res', 'Modal per pcs', rp(m.perPcs), m.sub, d.mode === 'manual' ? ['Bahan dari stok', rp(m.jasa.bahan)] : null);
       if (d.mode === 'sendiri') {
         h += '<div class="rowf">' + F('Nama produk', 'd.nama', d.nama, { mode: 'text', ph: 'Contoh: brownies kukus', style: 'flex:2' }) + F('Hasil jadi (pcs)', 'd.hasil', d.hasil, { ph: '20' }) + '</div>';
         h += card(hl('BAHAN (jumlah × harga beli)') + d.bahan.map(bahanRow).join('') + '<div style="padding:6px 0 12px">' + btn('+ Tambah bahan', 'addBahan', 'dash') + '</div>');
@@ -144,9 +183,13 @@
         h += F('Ongkos tambahan per pcs (Rp)', 'd.ongkos', d.ongkos, { ph: '500' });
         h += '<div class="hint">Ongkos tambahan: ongkos kirim, plastik, es, dan sejenisnya. Isi 0 kalau tidak ada.</div>';
       } else {
-        h += F('Nama jasa', 'd.nama', d.nama, { mode: 'text', ph: 'Contoh: cuci motor' });
-        h += F('Modal bahan per layanan (Rp), boleh kosong', 'd.modal', d.modal, { ph: '3.000' });
-        h += '<div class="hint">Bahan habis pakai untuk 1 kali layanan, misalnya sabun dan pewangi. Kosongkan kalau tidak ada. Tarif jasa Anda diisi di langkah berikutnya.</div>';
+        jasaNorm(d);
+        h += '<div class="rowf">' + F('Nama jasa atau pesanan', 'd.nama', d.nama, { mode: 'text', ph: 'Contoh: jahit seragam', style: 'flex:2' }) + F('Jumlah (pcs)', 'd.pesanan', d.pesanan, { ph: '1000' }) + '</div>';
+        h += '<div class="hint" style="margin-top:-6px">Isi 1 untuk jasa satuan seperti cuci motor. Isi jumlah pcs untuk pesanan borongan.</div>';
+        h += card(hl('1. DAFTAR BIAYA') + (d.biaya.length ? d.biaya.map(biayaRow).join('') : '<div class="hint" style="padding:10px 0">Belum ada biaya. Tambah ongkos jahit, upah tim, sewa mesin, dan sejenisnya.</div>') + '<div style="padding:6px 0 12px">' + btn('+ Tambah biaya', 'addJBiaya', 'dash') + '</div>');
+        h += card(hl('2. BAHAN DARI STOK') + (d.bstok.length ? d.bstok.map(bstokRow).join('') : '<div class="hint" style="padding:10px 0">Untuk bahan yang disimpan di stok, misalnya benang, sabun, atau bahan pangan. Stok berkurang otomatis saat pesanan dicatat di Jualan.</div>') +
+          '<div style="padding:6px 0 4px">' + btn('+ Tambah bahan dari stok', 'addBstok', 'dash') + '</div>' +
+          '<div style="padding:0 0 12px"><button class="lnk" data-a="toBahanBaru">Bahan belum ada di daftar? Tambah bahan baru</button></div>');
       }
       h += btn('Lanjut: tentukan harga jual', 'toHarga');
       h += '</main>';
@@ -154,7 +197,20 @@
     },
     update: function () {
       var d = draft, m = modalNow(d);
-      setRes('res', { b: rp(m.perPcs), s: m.sub });
+      setRes('res', { b: rp(m.perPcs), s: m.sub, xv: m.jasa ? rp(m.jasa.bahan) : '' });
+      if (d.mode === 'manual') {
+        var n = num(d.pesanan);
+        d.biaya.forEach(function (b, i) {
+          var t = C.biayaBaris(b, n), tx = '= ' + rp(t);
+          if (b.cara === 'harian' && num(b.orang) > 0 && n > 0) tx += ' · ' + fmt(n / num(b.orang)) + ' pcs per orang';
+          set('jb' + i, tx);
+        });
+        d.bstok.forEach(function (b, i) {
+          var t = C.bahanBaris(b, n), tx = '= ' + rp(t);
+          if (b.cara === 'semua' && n > 0) tx = fmt(num(b.jumlah) / n, 4) + ' per pcs · ' + tx;
+          set('jt' + i, tx);
+        });
+      }
       if (d.mode === 'sendiri') d.bahan.forEach(function (b, i) { set('sub' + i, '= ' + rp(num(b.jumlah) * num(b.harga))); });
     }
   };
@@ -405,7 +461,7 @@
       h += '<div class="hint">Tanda Menipis muncul kalau sisa sama dengan atau di bawah angka ini.</div>';
       h += btn('Simpan bahan', 'saveBahan');
       h += btn('Simpan dan tambah lagi', 'saveBahanLagi', 'out');
-      h += '<a class="lnk" href="#/bahan">Batal</a>';
+      h += '<button class="lnk" data-a="batalBahan">Batal</button>';
       return h + '</main>';
     }
   };
@@ -537,13 +593,20 @@
 
   var A = {
     mode: function (el) { draft.mode = el.dataset.v; render(true); },
+    addJBiaya: function () { jasaNorm(draft); draft.biaya.push({ nama: '', jml: '', cara: 'pcs', orang: '', hari: '' }); render(true); },
+    delJBiaya: function (el) { draft.biaya.splice(+el.dataset.i, 1); render(true); },
+    addBstok: function () { jasaNorm(draft); draft.bstok.push({ nama: '', jumlah: '', cara: 'pcs', harga: '' }); render(true); },
+    delBstok: function (el) { draft.bstok.splice(+el.dataset.i, 1); render(true); },
+    toBahanBaru: function () { ui.back = 'modal'; go('bahan-baru'); },
+    batalBahan: function () { var b = ui.back; ui.back = null; ui.baru = null; go(b || 'bahan'); },
     addBahan: function () { draft.bahan.push({ nama: '', jumlah: '', satuan: '', harga: '' }); render(true); },
     delBahan: function (el) { draft.bahan.splice(+el.dataset.i, 1); if (!draft.bahan.length) draft.bahan.push({ nama: '', jumlah: '', satuan: '', harga: '' }); render(true); },
     toHarga: function () {
       var d = draft, m = modalNow(d);
       if (!d.nama.trim()) return toast('Isi nama produk dulu.');
       if (d.mode === 'sendiri' && !(num(d.hasil) > 0)) return toast('Isi hasil jadi (pcs) dulu.');
-      if (d.mode !== 'manual' && !(m.perPcs > 0)) return toast('Modal per pcs belum terhitung. Isi dulu angkanya.');
+      if (d.mode === 'manual') { if (!(num(d.pesanan) > 0)) return toast('Isi jumlah pesanan (pcs) dulu.'); }
+      else if (!(m.perPcs > 0)) return toast('Modal per pcs belum terhitung. Isi dulu angkanya.');
       go('harga');
     },
     why: function () { ui.why = !ui.why; var w = $('why'); if (w) w.style.display = ui.why ? 'block' : 'none'; },
@@ -605,6 +668,7 @@
       if (nama.toLowerCase() !== s.nama.trim().toLowerCase()) {
         db.produk.forEach(function (p) {
           if (p.src && p.src.bahan) p.src.bahan.forEach(function (b) { if (String(b.nama).trim().toLowerCase() === s.nama.trim().toLowerCase()) b.nama = nama; });
+          if (p.src && p.src.bstok) p.src.bstok.forEach(function (b) { if (String(b.nama).trim().toLowerCase() === s.nama.trim().toLowerCase()) b.nama = nama; });
         });
       }
       s.nama = nama; s.satuan = satuan; s.stok = r6(num(k.sisa)); s.batas = num(k.batas);
@@ -618,7 +682,7 @@
     },
     saveBahan: function () {
       var it = tambahBahan(); if (!it) return;
-      ui.baru = null; toast('Bahan ditambahkan'); go('bahan');
+      var bk = ui.back; ui.back = null; ui.baru = null; toast('Bahan ditambahkan'); go(bk || 'bahan');
     },
     saveBahanLagi: function () {
       var sat = ui.baru.satuan, it = tambahBahan(); if (!it) return;
@@ -669,6 +733,14 @@
   };
 
   var CH = {
+    jCara: function (v, el) { draft.biaya[+el.dataset.i].cara = v; render(true); },
+    jCaraB: function (v, el) { draft.bstok[+el.dataset.i].cara = v; render(true); },
+    jBahan: function (v, el) {
+      var b = draft.bstok[+el.dataset.i]; b.nama = v;
+      var s = v ? stokByName(v) : null;
+      if (s && String(b.harga).trim() === '') { var h = lastHarga(s.id); if (h != null) b.harga = C.fmtNum(h, 0); }
+      render(true);
+    },
     setTgl: function (v) { if (!v) return; ui.jd = v; ui.jq = null; render(true); },
     pilihTarget: function (v) { go('target/' + v); },
     pilihBahan: function (v) { ui.bel.id = v; render(true); },
