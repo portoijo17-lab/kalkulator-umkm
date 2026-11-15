@@ -8,7 +8,8 @@ header.top .step{font-size:14px;font-weight:600;color:var(--acc);letter-spacing:
 header.top h1{margin:4px 0 0;font-size:28px;font-weight:700}
 header.top .sub{margin-top:6px;font-size:16px;color:var(--mut);line-height:1.4}
 main{flex:1;padding:0 20px 110px;display:flex;flex-direction:column;gap:12px}
-.field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.rowf>.field,.bahan .top>.field{flex:1}
 .field label{font-size:15px;font-weight:600;color:var(--mut)}
 input,select{height:52px;border:1px solid var(--brd);border-radius:12px;padding:0 14px;font-size:18px;font-family:inherit;background:#fff;color:var(--ink);width:100%}
 input:focus,select:focus{outline:2px solid var(--acc);outline-offset:0}
