@@ -370,23 +370,25 @@
     render: function (arg) {
       var s = stokById(arg);
       if (!s) { location.hash = '#/bahan'; return ''; }
-      if (!ui.kor || ui.kor.id !== s.id) ui.kor = { id: s.id, sisa: String(r6(Math.max(0, num(s.stok)))).replace('.', ','), batas: String(s.batas).replace('.', ',') };
+      if (!ui.kor || ui.kor.id !== s.id) ui.kor = { id: s.id, nama: s.nama, satuan: s.satuan, sisa: String(r6(Math.max(0, num(s.stok)))).replace('.', ','), batas: String(s.batas).replace('.', ',') };
       var k = ui.kor;
-      var h = head(null, 'Koreksi stok', 'Samakan stok di aplikasi dengan sisa yang ada sekarang.') + '<main>';
+      var h = head(null, 'Ubah bahan', 'Koreksi stok, atau ubah nama dan satuan.') + '<main>';
       h += res('res', 'Sisa stok ' + esc(s.nama), '', '', ['Selisih dari catatan aplikasi', '']);
       h += card(row('Stok menurut aplikasi', 'dihitung dari belanja dan jualan', fmt(num(s.stok)) + ' ' + esc(s.satuan)));
-      h += F('Sisa sebenarnya (' + esc(s.satuan) + ')', 'u.kor.sisa', k.sisa);
-      h += F('Batas menipis (' + esc(s.satuan) + ')', 'u.kor.batas', k.batas);
-      h += '<div class="hint">Tanda Menipis muncul kalau sisa sama dengan atau di bawah angka ini. Isi sesuai kebutuhan usaha Anda.</div>';
-      h += btn('Simpan koreksi', 'saveKoreksi');
+      h += F('Sisa sebenarnya', 'u.kor.sisa', k.sisa);
+      h += F('Batas menipis', 'u.kor.batas', k.batas);
+      h += '<div class="hint" style="margin-top:-6px">Tanda Menipis muncul kalau sisa sama dengan atau di bawah angka ini. Isi sesuai kebutuhan usaha Anda.</div>';
+      h += '<div class="rowf">' + F('Nama bahan', 'u.kor.nama', k.nama, { mode: 'text', style: 'flex:2' }) + F('Satuan', 'u.kor.satuan', k.satuan, { mode: 'text' }) + '</div>';
+      h += '<div class="hint" style="margin-top:-6px">Mengubah satuan tidak mengubah angka stok. Kalau nama diubah, nama bahan di resep produk ikut disesuaikan.</div>';
+      h += btn('Simpan', 'saveKoreksi');
       h += '<a class="lnk" href="#/bahan">Kembali ke daftar bahan</a>';
       h += '<button class="btn red" data-a="delStok" data-id="' + s.id + '">Hapus bahan ini</button>';
       return h + '</main>';
     },
     update: function () {
       var k = ui.kor, s = stokById(k.id); if (!s) return;
-      var sisa = num(k.sisa), st = C.stokStatus({ stok: sisa, batas: k.batas }), sel = sisa - num(s.stok);
-      setRes('res', { b: fmt(sisa) + ' ' + s.satuan, s: st + ' · batas ' + fmt(num(k.batas)) + ' ' + s.satuan, xv: (sel > 0 ? '+ ' : (sel < 0 ? '− ' : '')) + fmt(Math.abs(sel)) + ' ' + s.satuan });
+      var sisa = num(k.sisa), st = C.stokStatus({ stok: sisa, batas: k.batas }), sel = sisa - num(s.stok), sat = k.satuan;
+      setRes('res', { t: 'Sisa stok ' + k.nama, b: fmt(sisa) + ' ' + sat, s: st + ' · batas ' + fmt(num(k.batas)) + ' ' + sat, xv: (sel > 0 ? '+ ' : (sel < 0 ? '− ' : '')) + fmt(Math.abs(sel)) + ' ' + sat });
     }
   };
 
@@ -402,6 +404,7 @@
       h += F('Batas menipis', 'u.baru.batas', b.batas, { ph: 'Contoh: 1' });
       h += '<div class="hint">Tanda Menipis muncul kalau sisa sama dengan atau di bawah angka ini.</div>';
       h += btn('Simpan bahan', 'saveBahan');
+      h += btn('Simpan dan tambah lagi', 'saveBahanLagi', 'out');
       h += '<a class="lnk" href="#/bahan">Batal</a>';
       return h + '</main>';
     }
@@ -522,6 +525,16 @@
   // ---------- Aksi ----------
   function go(h) { if (location.hash === '#/' + h) render(); else location.hash = '#/' + h; }
 
+  function tambahBahan() {
+    var b = ui.baru;
+    if (!b.nama.trim()) { toast('Isi nama bahan.'); return null; }
+    if (stokByName(b.nama)) { toast('Bahan itu sudah ada di daftar.'); return null; }
+    if (!b.satuan.trim()) { toast('Isi satuannya, misalnya kg atau butir.'); return null; }
+    var it = { id: nid(), nama: b.nama.trim(), satuan: b.satuan.trim(), stok: num(b.stok), batas: num(b.batas) };
+    db.stok.push(it); ui.bel = null;
+    return save() ? it : null;
+  }
+
   var A = {
     mode: function (el) { draft.mode = el.dataset.v; render(true); },
     addBahan: function () { draft.bahan.push({ nama: '', jumlah: '', satuan: '', harga: '' }); render(true); },
@@ -585,9 +598,18 @@
     },
     saveKoreksi: function () {
       var k = ui.kor, s = stokById(k.id); if (!s) return;
-      s.stok = r6(num(k.sisa)); s.batas = num(k.batas);
+      var nama = k.nama.trim(), satuan = k.satuan.trim(), dup = stokByName(nama);
+      if (!nama) return toast('Nama bahan tidak boleh kosong.');
+      if (dup && dup.id !== s.id) return toast('Sudah ada bahan dengan nama itu.');
+      if (!satuan) return toast('Isi satuannya, misalnya kg atau butir.');
+      if (nama.toLowerCase() !== s.nama.trim().toLowerCase()) {
+        db.produk.forEach(function (p) {
+          if (p.src && p.src.bahan) p.src.bahan.forEach(function (b) { if (String(b.nama).trim().toLowerCase() === s.nama.trim().toLowerCase()) b.nama = nama; });
+        });
+      }
+      s.nama = nama; s.satuan = satuan; s.stok = r6(num(k.sisa)); s.batas = num(k.batas);
       if (!save()) return;
-      toast('Stok ' + s.nama + ' dikoreksi'); ui.kor = null; go('bahan');
+      toast('Bahan ' + s.nama + ' disimpan'); ui.kor = null; ui.bel = null; go('bahan');
     },
     delStok: function (el) {
       var s = stokById(el.dataset.id); if (!s) return;
@@ -595,14 +617,15 @@
       db.stok = db.stok.filter(function (x) { return x.id !== s.id; }); ui.kor = null; ui.bel = null; save(); go('bahan');
     },
     saveBahan: function () {
-      var b = ui.baru;
-      if (!b.nama.trim()) return toast('Isi nama bahan.');
-      if (stokByName(b.nama)) return toast('Bahan itu sudah ada di daftar.');
-      if (!b.satuan.trim()) return toast('Isi satuannya, misalnya kg atau butir.');
-      var it = { id: nid(), nama: b.nama.trim(), satuan: b.satuan.trim(), stok: num(b.stok), batas: num(b.batas) };
-      db.stok.push(it); ui.bel = null; ui.baru = null;
-      if (!save()) return;
-      toast('Bahan ditambahkan'); go('bahan');
+      var it = tambahBahan(); if (!it) return;
+      ui.baru = null; toast('Bahan ditambahkan'); go('bahan');
+    },
+    saveBahanLagi: function () {
+      var sat = ui.baru.satuan, it = tambahBahan(); if (!it) return;
+      ui.baru = { nama: '', satuan: sat, stok: '', batas: '' };
+      toast(it.nama + ' ditambahkan. Isi bahan berikutnya.');
+      render();
+      var i = document.querySelector('[data-k="u.baru.nama"]'); if (i) i.focus();
     },
     saveLain: function () {
       var l = ui.lain;
