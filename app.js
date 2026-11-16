@@ -76,7 +76,8 @@
 
   // ---------- keadaan layar ----------
   var draft = null;
-  var ui = { pstep: 1, ptype: 'sendiri', why: false, allDays: false, allBel: false, jd: null, jq: null, jqDate: null, bel: null, kor: null, baru: null, lain: { untuk: '', jml: '' }, um: null, back: null };
+  var ui = { pstep: 1, ptype: 'sendiri', why: false, allDays: false, allBel: false, jd: null, jq: null, jqDate: null, bel: null, kor: null, baru: null, lain: { untuk: '', jml: '' }, um: null, back: null, ready: false, aktif: false, exp: '', kode: '', aMsg: '', busy: false };
+  var WA_NOMOR = '';
   var cur = { name: '', arg: '', route: null };
 
   function newDraft(mode) {
@@ -519,7 +520,32 @@
       h += card(hl('DATA') + '<div style="padding:6px 0 12px;display:flex;flex-direction:column;gap:10px">' +
         '<label class="btn out" style="cursor:pointer">Pulihkan dari cadangan<input type="file" accept=".json,application/json" data-ch="restore" style="display:none"></label>' +
         '<button class="btn out" data-a="sample">Coba dengan data contoh</button><button class="btn red" data-a="wipe">Hapus semua data</button>' +
-        '<div class="hint">Data tersimpan di HP ini saja. Cadangkan sesekali supaya aman kalau HP ganti atau hilang.</div></div>');
+        '<div class="hint">Data tersimpan di HP ini saja. Cadangkan sesekali supaya aman kalau HP ganti atau hilang.</div>' +
+        (ui.exp ? '<div class="hint">Aplikasi aktif ' + (ui.exp === '00000000' ? 'tanpa batas waktu.' : 'sampai ' + window.Act.fmtExp(ui.exp) + '.') + '</div>' : '') + '</div>');
+      return h + '</main>';
+    }
+  };
+
+  // ---------- Aktivasi ----------
+  function aktMsg(r) {
+    if (r.alasan === 'format') return 'Kode tidak dikenali. Tempel kode utuh dari penjual, tanpa tambahan huruf.';
+    if (r.alasan === 'salah') return 'Kode ini tidak cocok untuk HP ini. Pastikan Kode HP yang Anda kirim ke penjual sama dengan yang tampil di atas.';
+    if (r.alasan === 'habis') return 'Masa berlaku kode sudah habis (' + window.Act.fmtExp(r.exp) + '). Minta kode baru ke penjual. Data Anda tetap aman di HP ini.';
+    if (r.alasan === 'nocrypto') return 'Aplikasi harus dibuka lewat alamat https. Hubungi penjual.';
+    return '';
+  }
+  R.aktivasi = {
+    nonav: true,
+    render: function () {
+      var dev = window.Act.getDeviceId();
+      var h = head(null, 'Aktivasi', 'Masukkan kode dari penjual untuk memakai aplikasi.') + '<main>';
+      h += card('<div style="padding:14px 0"><div class="hint">Kode HP Anda</div><div style="font-size:30px;font-weight:700;letter-spacing:2px;margin:4px 0 10px">' + dev + '</div>' +
+        '<div class="hint" style="margin-bottom:10px">Kirim kode ini ke penjual, lalu Anda akan menerima kode aktivasi.</div>' +
+        '<div class="btns"><button class="btn out" data-a="salinDev">Salin Kode HP</button>' +
+        (WA_NOMOR ? '<a class="btn out" href="https://wa.me/' + WA_NOMOR + '?text=' + encodeURIComponent('Halo, saya mau aktivasi Kalkulator UMKM. Kode HP saya: ' + dev) + '">Kirim lewat WhatsApp</a>' : '') + '</div></div>');
+      h += F('Kode aktivasi', 'u.kode', ui.kode, { mode: 'text', ph: 'Tempel kode di sini' });
+      if (ui.aMsg) h += '<div class="note" style="background:#fbeaea;color:#8a1c1c">' + esc(ui.aMsg) + '</div>';
+      h += btn('Aktifkan', 'aktifkan');
       return h + '</main>';
     }
   };
@@ -593,6 +619,21 @@
 
   var A = {
     mode: function (el) { draft.mode = el.dataset.v; render(true); },
+    salinDev: function () {
+      var d = window.Act.getDeviceId();
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(d).then(function () { toast('Kode HP disalin'); }, function () { toast('Tidak bisa menyalin. Catat kode di layar.'); });
+      else toast('Tidak bisa menyalin. Catat kode di layar.');
+    },
+    aktifkan: function () {
+      if (ui.busy) return;
+      if (!String(ui.kode).trim()) { ui.aMsg = 'Tempel kode aktivasi dulu.'; render(true); return; }
+      ui.busy = true;
+      window.Act.activate(ui.kode).then(function (r) {
+        ui.busy = false;
+        if (r.ok) { ui.aktif = true; ui.exp = r.exp; ui.kode = ''; ui.aMsg = ''; toast('Aplikasi aktif'); go(''); }
+        else { ui.aMsg = aktMsg(r); render(true); }
+      });
+    },
     addJBiaya: function () { jasaNorm(draft); draft.biaya.push({ nama: '', jml: '', cara: 'pcs', orang: '', hari: '' }); render(true); },
     delJBiaya: function (el) { draft.biaya.splice(+el.dataset.i, 1); render(true); },
     addBstok: function () { jasaNorm(draft); draft.bstok.push({ nama: '', jumlah: '', cara: 'pcs', harga: '' }); render(true); },
@@ -788,6 +829,8 @@
   var GROUP = { modal: '', harga: '', target: '', produk: '', panduan: '', belanja: 'bahan', koreksi: 'bahan', 'bahan-baru': 'bahan' };
   function render(keep) {
     var h = (location.hash || '#/').replace(/^#\/?/, ''), parts = h.split('/'), name = parts[0], arg = parts[1];
+    if (!ui.ready) { app.innerHTML = '<main><div class="note">Memeriksa…</div></main>'; return; }
+    if (!ui.aktif) name = 'aktivasi';
     var r = R[name] || R['']; if (!R[name]) name = '';
     cur = { name: name, arg: arg, route: r };
     var y = window.scrollY, html = r.render(arg);
@@ -825,6 +868,11 @@
   window.__app = { get db() { return db; }, A: A, CH: CH, go: go, render: render, loadSample: loadSample, ui: ui, get draft() { return draft; } };
 
   render();
+  window.Act.check().catch(function () { return { ok: false, alasan: 'nocrypto' }; }).then(function (r) {
+    ui.ready = true; ui.aktif = !!r.ok; ui.exp = r.ok ? r.exp : '';
+    if (!r.ok && r.alasan === 'habis') ui.aMsg = aktMsg(r);
+    render();
+  });
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     var had = !!navigator.serviceWorker.controller, reloaded = false;

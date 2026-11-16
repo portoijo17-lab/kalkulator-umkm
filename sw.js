@@ -1,7 +1,7 @@
 /* Service worker: aplikasi bisa dibuka tanpa internet, dan diperbarui otomatis saat online. */
-const VERSI = 'v5';
+const VERSI = 'v6';
 const CACHE = 'kalkulator-umkm-' + VERSI;
-const FILE = ['./', 'index.html', 'style.css', 'calc.js', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
+const FILE = ['./', 'index.html', 'style.css', 'calc.js', 'act.js', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILE)).then(() => self.skipWaiting()));
